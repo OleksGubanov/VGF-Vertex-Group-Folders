@@ -1,0 +1,10 @@
+schema_version = "1.0.0"
+id = "vgf_vertex_group_folders"
+version = "1.0.0"
+name = "VGF: Vertex Group Folders"
+tagline = "Organize lists of Vertex Groups into a folders"
+maintainer = "Oleksandr Gubanov (Zingless)"
+type = "add-on"
+blender_version_min = "4.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+tags = ["Rigging", "Modeling", "Animation"]
