@@ -1,4 +1,4 @@
-schema_version = "1.0.0"
+schema_version = "1.0.2"
 id = "vgf_vertex_group_folders"
 version = "1.0.0"
 name = "VGF: Vertex Group Folders"
