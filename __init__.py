@@ -2,10 +2,10 @@
 bl_info = {
     "name": "VGF: Vertex Group Folders",
     "author": "Oleksandr Gubanov (Zingless)",
-    "version": (1, 0, 0),
+    "version": (1, 0, 2),
     "blender": (4, 2, 0),
     "location": "Properties > Object Data > Vertex Groups",
-    "description": "Organize lists of Vertex Groups into a folders",
+    "description": "Organize lists of Vertex Groups into folders",
     "category": "Object",
 }
 
@@ -50,47 +50,37 @@ def new_uid():
 # 2. NATIVE ADAPTER (Blender API Facade)
 # =========================================================
 class NativeAdapter:
-    """
-    Handles native Blender API calls.
-    Utilizes direct data access to minimize bpy.ops overhead where possible.
-    """
+    """Handles native Blender API calls."""
     
     @staticmethod
     def get_groups(obj):
-        """Return the native vertex groups collection."""
         return obj.vertex_groups
 
     @staticmethod
     def add_group(obj):
-        """Add a new vertex group using direct data API."""
         obj.vertex_groups.new(name="Group")
 
     @staticmethod
     def remove_active_group(obj):
-        """Remove the active vertex group using direct data API."""
         if obj.vertex_groups.active:
             obj.vertex_groups.remove(obj.vertex_groups.active)
 
     @staticmethod
     def remove_all_groups(obj):
-        """Clear all vertex groups using direct data API."""
         obj.vertex_groups.clear()
 
     @staticmethod
     def remove_unlocked_groups(obj):
-        """Remove unlocked vertex groups using direct data API."""
         for vg in reversed(obj.vertex_groups):
             if not vg.lock_weight:
                 obj.vertex_groups.remove(vg)
 
     @staticmethod
     def duplicate_group():
-        """Duplicate active group (Requires bpy.ops as no direct data API exists)."""
         bpy.ops.object.vertex_group_copy()
 
     @staticmethod
     def mirror_group(use_topology=False):
-        """Mirror active group (Requires bpy.ops)."""
         bpy.ops.object.vertex_group_mirror(
             mirror_weights=True, 
             flip_group_names=True, 
@@ -99,17 +89,14 @@ class NativeAdapter:
 
     @staticmethod
     def sort_groups_name():
-        """Sort groups alphabetically (Requires bpy.ops)."""
         bpy.ops.object.vertex_group_sort(sort_type='NAME')
 
     @staticmethod
     def sort_groups_bone():
-        """Sort groups by bone hierarchy (Requires bpy.ops)."""
         bpy.ops.object.vertex_group_sort(sort_type='BONE_HIERARCHY')
 
     @staticmethod
     def lock_all(obj, action='LOCK'):
-        """Modify lock state of all groups using direct data API."""
         for vg in obj.vertex_groups:
             if action == 'LOCK':
                 vg.lock_weight = True
@@ -120,14 +107,12 @@ class NativeAdapter:
 
     @staticmethod
     def set_active_index(obj, idx):
-        """Set the native active vertex group index."""
         if 0 <= idx < len(obj.vertex_groups):
             if obj.vertex_groups.active_index != idx:
                 obj.vertex_groups.active_index = idx
 
     @staticmethod
     def rename_group(obj, old_name, new_name):
-        """Rename a vertex group directly via data API."""
         vg = obj.vertex_groups.get(old_name)
         if vg:
             vg.name = new_name
@@ -142,7 +127,6 @@ class SyncService:
 
     @staticmethod
     def sync_order_from_native(obj):
-        """Update custom node sorting to match native vertex group order."""
         native_vgs = list(NativeAdapter.get_groups(obj))
         native_order = {vg.name: i for i, vg in enumerate(native_vgs)}
 
@@ -166,20 +150,17 @@ class SyncService:
 
     @staticmethod
     def reconcile(obj, target_parent_uid=ROOT_UID):
-        """Ensure custom property list matches actual vertex groups on the object."""
         active_uid = CommandController._get_active_uid(obj)
         native_vgs = list(NativeAdapter.get_groups(obj))
         native_vg_names = {vg.name for vg in native_vgs}
         changed = False
 
-        # Remove dead nodes
         for i in range(len(obj.zls_vgf_nodes) - 1, -1, -1):
             node = obj.zls_vgf_nodes[i]
             if node.node_type == ITEM_GROUP and node.name not in native_vg_names:
                 obj.zls_vgf_nodes.remove(i)
                 changed = True
 
-        # Add missing native groups
         our_vg_names = {node.name for node in obj.zls_vgf_nodes if node.node_type == ITEM_GROUP}
         for vg in native_vgs:
             if vg.name not in our_vg_names:
@@ -191,7 +172,6 @@ class SyncService:
                 node.sort_key = 999999
                 changed = True
 
-        # Update active selection
         native_active_idx = NativeAdapter.get_groups(obj).active_index
         if 0 <= native_active_idx < len(native_vgs):
             native_active_name = native_vgs[native_active_idx].name
@@ -209,7 +189,6 @@ class SyncService:
 
     @staticmethod
     def normalize_sort(obj):
-        """Reassign consecutive sort keys to elements."""
         children_map = {}
         for node in obj.zls_vgf_nodes:
             children_map.setdefault(node.parent_uid, []).append(node)
@@ -222,7 +201,6 @@ class SyncService:
 
     @staticmethod
     def rebuild_ui(obj):
-        """Reconstruct the flat UI list from the custom node structure."""
         obj.zls_vgf_ui_rows.clear()
         
         def walk(parent_uid, depth):
@@ -246,14 +224,12 @@ class CommandController:
 
     @staticmethod
     def _get_active_uid(obj):
-        """Retrieve the UID of the currently active UI row."""
         if hasattr(obj, 'zls_vgf_ui_rows') and obj.zls_vgf_ui_rows and 0 <= obj.zls_vgf_active < len(obj.zls_vgf_ui_rows):
             return obj.zls_vgf_ui_rows[obj.zls_vgf_active].uid
         return None
 
     @staticmethod
     def execute_add_folder(obj):
-        """Create a new folder in the active directory."""
         target_uid = CommandController._get_active_target_folder(obj)
         node = obj.zls_vgf_nodes.add()
         node.uid = new_uid()
@@ -268,14 +244,12 @@ class CommandController:
 
     @staticmethod
     def execute_add_group(obj):
-        """Create a new vertex group via NativeAdapter."""
         target_uid = CommandController._get_active_target_folder(obj)
         NativeAdapter.add_group(obj)
         SyncService.reconcile(obj, target_parent_uid=target_uid)
 
     @staticmethod
     def execute_remove_active(obj):
-        """Remove the active item (folder or group) and its children."""
         idx = obj.zls_vgf_active
         if not (0 <= idx < len(obj.zls_vgf_ui_rows)):
             return
@@ -297,13 +271,11 @@ class CommandController:
         elif node.node_type == ITEM_FOLDER:
             uids_to_del = set()
             if node.is_expanded:
-                # If expanded, just unpack items into parent folder
                 for child in [n for n in obj.zls_vgf_nodes if n.parent_uid == node.uid]:
                     child.parent_uid = node.parent_uid
                     child.sort_key = 999999
                 uids_to_del.add(node.uid)
             else:
-                # If collapsed, delete the entire folder contents
                 def gather(c_uid):
                     uids_to_del.add(c_uid)
                     for child in [n for n in obj.zls_vgf_nodes if n.parent_uid == c_uid]:
@@ -335,7 +307,6 @@ class CommandController:
 
     @staticmethod
     def execute_rename(obj, uid, new_name):
-        """Rename item and sync name with native group if applicable."""
         node = CommandController.get_node(obj, uid)
         if not node or node.name == new_name:
             return
@@ -354,7 +325,6 @@ class CommandController:
 
     @staticmethod
     def execute_move(obj, direction):
-        """Reorder items within the same parent folder."""
         idx = obj.zls_vgf_active
         if not (0 <= idx < len(obj.zls_vgf_ui_rows)):
             return
@@ -385,12 +355,10 @@ class CommandController:
 
     @staticmethod
     def execute_change_parent(obj, uid, new_parent_uid):
-        """Change the parent folder of a specific node."""
         node = CommandController.get_node(obj, uid)
         if not node or node.parent_uid == new_parent_uid:
             return
 
-        # Prevent circular logic
         if node.node_type == ITEM_FOLDER and new_parent_uid != ROOT_UID:
             curr = new_parent_uid
             while curr != ROOT_UID:
@@ -413,7 +381,6 @@ class CommandController:
 
     @staticmethod
     def get_node(obj, uid):
-        """Retrieve a custom node by its unique identifier."""
         for n in obj.zls_vgf_nodes:
             if n.uid == uid:
                 return n
@@ -421,7 +388,6 @@ class CommandController:
 
     @staticmethod
     def _get_active_target_folder(obj):
-        """Determine which folder should receive new items."""
         if obj.zls_vgf_ui_rows and 0 <= obj.zls_vgf_active < len(obj.zls_vgf_ui_rows):
             act_uid = obj.zls_vgf_ui_rows[obj.zls_vgf_active].uid
             act_node = CommandController.get_node(obj, act_uid)
@@ -431,7 +397,6 @@ class CommandController:
 
     @staticmethod
     def _restore_selection(obj, target_uid):
-        """Re-apply selection to a specific node based on its UID."""
         for i, row in enumerate(obj.zls_vgf_ui_rows):
             if row.uid == target_uid:
                 obj.zls_vgf_active = i
@@ -444,43 +409,57 @@ def zls_vgf_ui_name_get(self):
     return self.name
 
 def zls_vgf_ui_name_set(self, value):
-    if getattr(self, "_is_updating", False):
-        return
+    if getattr(self, "_is_updating", False): return
     self._is_updating = True
     CommandController.execute_rename(self.id_data, self.uid, value)
     self._is_updating = False
 
-def zls_vgf_folder_dropdown_get(self):
-    obj = self.id_data
-    items = [(ROOT_UID, UI_STR_ROOT, "")]
-    items.extend([(n.uid, n.name, "") for n in obj.zls_vgf_nodes if n.node_type == ITEM_FOLDER])
-    for i, item in enumerate(items):
-        if item[0] == self.parent_uid:
-            return i
-    return 0
+# Global cache to prevent memory cleanup (Garbage Collection)
+_folder_enum_cache = []
 
-def zls_vgf_folder_dropdown_set(self, value):
-    obj = self.id_data
-    items = [(ROOT_UID, UI_STR_ROOT, "")]
-    items.extend([(n.uid, n.name, "") for n in obj.zls_vgf_nodes if n.node_type == ITEM_FOLDER])
-    if 0 <= value < len(items):
-        CommandController.execute_change_parent(obj, self.uid, items[value][0])
-
-def zls_vgf_folder_enum_generator(self, context):
+def folder_enum_generator(self, context):
+    global _folder_enum_cache
     obj = context.object if context else bpy.context.object
-    if not obj:
-        return [(ROOT_UID, UI_STR_ROOT, "")]
+    
+    items = [(ROOT_UID, UI_STR_ROOT, "", 'OUTLINER_COLLECTION', 0)]
+    if obj:
+        idx = 1
+        for n in obj.zls_vgf_nodes:
+            if n.node_type == ITEM_FOLDER:
+                items.append((n.uid, n.name, "", 'FILE_FOLDER', idx))
+                idx += 1
+                
+    _folder_enum_cache = items
+    return _folder_enum_cache
+
+def folder_dropdown_get(self):
+    obj = self.id_data
+    if self.parent_uid == ROOT_UID:
+        return 0
         
-    items = [(ROOT_UID, UI_STR_ROOT, UI_STR_ROOT, 'OUTLINER_COLLECTION', 0)]
     idx = 1
     for n in obj.zls_vgf_nodes:
         if n.node_type == ITEM_FOLDER:
-            items.append((n.uid, n.name, UI_STR_FOLDER, 'FILE_FOLDER', idx))
+            if n.uid == self.parent_uid:
+                return idx
             idx += 1
-    return items
+    return 0
+
+def folder_dropdown_set(self, value):
+    obj = self.id_data
+    if value == 0:
+        CommandController.execute_change_parent(obj, self.uid, ROOT_UID)
+        return
+        
+    idx = 1
+    for n in obj.zls_vgf_nodes:
+        if n.node_type == ITEM_FOLDER:
+            if idx == value:
+                CommandController.execute_change_parent(obj, self.uid, n.uid)
+                return
+            idx += 1
 
 class ZLSVGF_Node(bpy.types.PropertyGroup):
-    """Core property group defining a single list item (folder or group)."""
     uid: bpy.props.StringProperty()
     node_type: bpy.props.EnumProperty(
         items=[
@@ -504,20 +483,18 @@ class ZLSVGF_Node(bpy.types.PropertyGroup):
         description=UI_STR_GROUP
     )
     ui_parent_dropdown: bpy.props.EnumProperty(
-        items=zls_vgf_folder_enum_generator, 
-        get=zls_vgf_folder_dropdown_get, 
-        set=zls_vgf_folder_dropdown_set, 
+        items=folder_enum_generator, 
+        get=folder_dropdown_get, 
+        set=folder_dropdown_set, 
         name="", 
         description=DESC_MOVE_TO_FOLDER
     )
 
 class ZLSVGF_UIRow(bpy.types.PropertyGroup):
-    """Representation of a visible row in the flattened UI layout."""
     uid: bpy.props.StringProperty()
     depth: bpy.props.IntProperty()
 
 def zls_vgf_on_active_update(self, context):
-    """Callback triggered when the user selects a new item in the UIList."""
     obj = context.object
     if not obj or not hasattr(obj, 'zls_vgf_ui_rows'):
         return
@@ -534,7 +511,6 @@ def zls_vgf_on_active_update(self, context):
 # 6. OPERATORS (UI Triggers)
 # =========================================================
 class ZLSVGF_OT_add_folder(bpy.types.Operator):
-    """Operator to add a new folder to the organization structure."""
     bl_idname = "zls_vgf.add_folder"
     bl_label = "Add Folder"
     bl_description = DESC_ADD_FOLDER
@@ -545,7 +521,6 @@ class ZLSVGF_OT_add_folder(bpy.types.Operator):
         return {'FINISHED'}
 
 class ZLSVGF_OT_add_group(bpy.types.Operator):
-    """Operator to add a new vertex group."""
     bl_idname = "zls_vgf.add_group"
     bl_label = "Add Vertex Group"
     bl_description = DESC_ADD_GROUP
@@ -556,7 +531,6 @@ class ZLSVGF_OT_add_group(bpy.types.Operator):
         return {'FINISHED'}
 
 class ZLSVGF_OT_remove_item(bpy.types.Operator):
-    """Operator to remove the currently selected UI element."""
     bl_idname = "zls_vgf.remove_item"
     bl_label = "Remove Item"
     bl_description = DESC_REMOVE_ITEM
@@ -567,7 +541,6 @@ class ZLSVGF_OT_remove_item(bpy.types.Operator):
         return {'FINISHED'}
 
 class ZLSVGF_OT_move_item_up(bpy.types.Operator):
-    """Operator to shift item sorting upwards."""
     bl_idname = "zls_vgf.move_item_up"
     bl_label = "Move Item Up"
     bl_description = DESC_MOVE_UP
@@ -578,7 +551,6 @@ class ZLSVGF_OT_move_item_up(bpy.types.Operator):
         return {'FINISHED'}
 
 class ZLSVGF_OT_move_item_down(bpy.types.Operator):
-    """Operator to shift item sorting downwards."""
     bl_idname = "zls_vgf.move_item_down"
     bl_label = "Move Item Down"
     bl_description = DESC_MOVE_DOWN
@@ -589,7 +561,6 @@ class ZLSVGF_OT_move_item_down(bpy.types.Operator):
         return {'FINISHED'}
 
 class ZLSVGF_OT_toggle_folder(bpy.types.Operator):
-    """Operator to toggle folder expanded state."""
     bl_idname = "zls_vgf.toggle_folder"
     bl_label = "Toggle Folder"
     bl_description = DESC_TOGGLE_FOLDER
@@ -605,7 +576,6 @@ class ZLSVGF_OT_toggle_folder(bpy.types.Operator):
         return {'FINISHED'}
 
 class ZLSVGF_OT_sync(bpy.types.Operator):
-    """Operator to force synchronization between native array and custom properties."""
     bl_idname = "zls_vgf.sync"
     bl_label = "Sync Vertex Groups"
     bl_description = DESC_SYNC
@@ -617,7 +587,6 @@ class ZLSVGF_OT_sync(bpy.types.Operator):
         return {'FINISHED'}
 
 class ZLSVGF_OT_copy_to_selected(bpy.types.Operator):
-    """Operator to copy groups to selected meshes."""
     bl_idname = "zls_vgf.copy_to_selected"
     bl_label = "Copy Vertex Groups to Selected"
     bl_description = DESC_COPY_SEL
@@ -651,7 +620,6 @@ class ZLSVGF_OT_copy_to_selected(bpy.types.Operator):
         return {'FINISHED'}
 
 class ZLSVGF_OT_actions(bpy.types.Operator):
-    """Routing Operator for complex native vertex group actions."""
     bl_idname = "zls_vgf.actions"
     bl_label = "Run Special Operation"
     bl_options = {'UNDO'}
@@ -660,7 +628,6 @@ class ZLSVGF_OT_actions(bpy.types.Operator):
 
     @classmethod
     def description(cls, context, properties):
-        """Dynamic tooltips for menu entries."""
         action = properties.action
         if action == 'SORT_NAME': return "Sort vertex groups alphabetically by name"
         if action == 'SORT_BONE': return "Sort vertex groups based on armature bone hierarchy"
@@ -713,7 +680,6 @@ class ZLSVGF_OT_actions(bpy.types.Operator):
 # 7. VIEW (UIList & Panel)
 # =========================================================
 class ZLSVGF_MT_actions(bpy.types.Menu):
-    """Dropdown menu for vertex group mass operations."""
     bl_idname = "ZLSVGF_MT_actions"
     bl_label = "Vertex Group Actions"
 
@@ -740,7 +706,6 @@ class ZLSVGF_MT_actions(bpy.types.Menu):
         layout.operator("zls_vgf.actions", text="Lock Invert All").action = 'LOCK_INVERT'
 
 class ZLSVGF_UL_items(bpy.types.UIList):
-    """Custom drawing logic for the items displayed in the UI."""
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         obj = data
         node = CommandController.get_node(obj, item.uid)
@@ -787,7 +752,6 @@ class ZLSVGF_UL_items(bpy.types.UIList):
                 row.label(text=UI_STR_PENDING, icon='ERROR')
 
 class ZLSVGF_PT_panel(bpy.types.Panel):
-    """Main addon panel located in Object Data Properties."""
     bl_label = "Vertex Group Folders"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
@@ -865,7 +829,6 @@ classes = (
 )
 
 def register():
-    """Register module classes and object properties."""
     for cls in classes:
         bpy.utils.register_class(cls)
         
@@ -878,13 +841,15 @@ def register():
     )
 
 def unregister():
-    """Unregister module classes and clean up object properties."""
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
         
-    del bpy.types.Object.zls_vgf_nodes
-    del bpy.types.Object.zls_vgf_ui_rows
-    del bpy.types.Object.zls_vgf_active
+    if hasattr(bpy.types.Object, "zls_vgf_nodes"):
+        del bpy.types.Object.zls_vgf_nodes
+    if hasattr(bpy.types.Object, "zls_vgf_ui_rows"):
+        del bpy.types.Object.zls_vgf_ui_rows
+    if hasattr(bpy.types.Object, "zls_vgf_active"):
+        del bpy.types.Object.zls_vgf_active
 
 if __name__ == "__main__":
     register()
