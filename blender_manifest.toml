@@ -1,4 +1,4 @@
-schema_version = "1.0.2"
+schema_version = "1.0.3"
 id = "vgf_vertex_group_folders"
 version = "1.0.0"
 name = "VGF: Vertex Group Folders"
@@ -7,4 +7,4 @@ maintainer = "Oleksandr Gubanov (Zingless)"
 type = "add-on"
 blender_version_min = "4.2.0"
 license = ["SPDX:GPL-3.0-or-later"]
-tags = ["Rigging", "Modeling", "Animation"]
+tags = ["Rigging", "Modeling",]
